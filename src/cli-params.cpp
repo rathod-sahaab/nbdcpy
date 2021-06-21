@@ -12,7 +12,8 @@ CliParams parse_cli(int argc, char **argv) {
 
   try {
     app.parse(argc, argv);
-  } catch (...) {
+  } catch (CLI::ParseError &e) {
+    app.exit(e);
     exit(1);
   }
 
