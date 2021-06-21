@@ -1,4 +1,6 @@
 #include "oldstyle.hpp"
+#include "fmt/format.h"
+#include <algorithm>
 #include <bitset>
 #include <cstring>
 #include <iomanip>
@@ -12,13 +14,17 @@ void print_server_offer(const OldstyleServerOffer &server_offer) {
   char magic_string[9];
   memcpy(magic_string, &server_offer.magic, 8);
 
-  std::cout << magic_string << "\n";
-  std::cout << std::setbase(16) << std::showbase << server_offer.cliserv_magic
-            << std::setbase(0) << "\n";
-  std::cout << server_offer.export_size << "\n";
+  if (magic_string[0] == 'C') {
+    // if machine is little_endian the last character C becomes the first
+    // character. So we reverse to see NBDMAGIC
+    std::reverse(magic_string, magic_string + 8);
+  }
 
-  std::bitset<32> bits(server_offer.flags);
-  std::cout << "0b" << bits << "\n";
+  fmt::print("{} ({:#x})\n", magic_string, server_offer.magic);
+  fmt::print("{:#x}\n", server_offer.cliserv_magic);
+  fmt::print("{}\n", server_offer.export_size);
+  const auto bits = std::bitset<32>(server_offer.flags);
+  fmt::print("0b{}\n", bits.to_string());
 
   return;
 }
