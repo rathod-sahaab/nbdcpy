@@ -1,4 +1,5 @@
 #include "cli-params.hpp"
+#include "fmt/core.h"
 #include "nbd_connection.hpp"
 #include "nbd_types.hpp"
 #include "oldstyle.hpp"
@@ -13,18 +14,20 @@ int main(int argc, char **argv) {
   io_uring_queue_init(MAX_INFLIGHT_REQUESTS, &ring, 0);
 
   const auto cli_params = parse_cli(argc, argv);
-  std::cout << cli_params.src_port << " --> " << cli_params.dest_port << "\n";
+  fmt::print("Copying from port {} to port {}.\n", cli_params.src_port,
+             cli_params.dest_port);
 
-  NbdConnection nbd_src(cli_params.src_port, &ring);
-  NbdConnection nbd_dest(cli_params.dest_port, &ring);
+  NbdConnection nbd_src("source", cli_params.src_port, &ring);
+  NbdConnection nbd_dest("destination", cli_params.dest_port, &ring);
 
   if (nbd_dest.get_size() < nbd_src.get_size()) {
-    std::cout << "Source is larger than destination, will cause data loss"
-              << "\n";
+    fmt::print("Source is larger than destination, will cause data loss\n");
+    io_uring_queue_exit(&ring);
     exit(1);
   }
   const off_t total_size = nbd_src.get_size();
   off_t offset = 0, bytes_left = total_size;
 
+  io_uring_queue_exit(&ring);
   return 0;
 }

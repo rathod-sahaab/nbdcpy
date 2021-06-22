@@ -1,6 +1,8 @@
 #include "nbd_connection.hpp"
+#include "fmt/core.h"
 #include "nbd_types.hpp"
 #include "oldstyle.hpp"
+#include "utils.hpp"
 #include <arpa/inet.h>
 #include <bits/stdint-uintn.h>
 #include <cstdio>
@@ -12,7 +14,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-NbdConnection::NbdConnection(const int port, io_uring *ring) : ring_ptr{ring} {
+NbdConnection::NbdConnection(const std::string &&name, const int port, io_uring *ring)
+    : ring_ptr{ring}, name{name} {
   socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 
   if (socket_fd == -1) {
@@ -44,6 +47,8 @@ NbdConnection::NbdConnection(const int port, io_uring *ring) : ring_ptr{ring} {
     exit(3);
   }
 
+  /* fmt::print("{:-^30}\n", name); */
+  print_header(name);
   print_server_offer(offer);
 
   size = offer.export_size;
