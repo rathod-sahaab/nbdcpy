@@ -46,9 +46,9 @@ So if we send 2 read requests simultaneously (i.e. another request before reply 
 First request
 
 ```yaml
-offset: 0,
-length: 512,
-handle: 0,
+offset: 0
+length: 512
+handle: 0
 ```
 
 Second Request
@@ -66,7 +66,7 @@ handle: 1
 data: "Data bytes..."
 ```
 
-Due to handle we know that it's actually the response to second request and we can then take appropriate action for the same. We can also reuse handles for the request that have be fully complete.
+Due to handle we know that it's actually the response to second request and we can then take appropriate action for the same. We can also reuse handles from the request that are fully complete.
 
 **NOTE:** The handle need not be common between source and destination in context of nbdcpy but is easier to implement this way.
 
@@ -86,9 +86,9 @@ Struct NbdOperation {
 vector<NbdOperation> operations;
 ```
 
-The index of an operation will be used as `handle`. These handles will be reused once an operation is complete i.e. we went successfully through all the states.
+The index of an operation will be used as `handle` for the command it houses. These handles will be reused once an operation is complete i.e. we went successfully through all the states of an operation.
 
-In diagram below 0 and 1 are indexes in operation vector and total requests were 3 with  `infligh_max = 2`.
+In diagram below 0 and 1 are indexes in operation vector and total requests were 3 with `inflight_max = 2`.
 
 ```mermaid
 graph TD;
@@ -133,6 +133,6 @@ stateDiagram-v2
 	confirming --> [*] :cqe
 ```
 
-Events are `cqe` (we get a completion queue entry) we can attach some data with submission queue entry SQE which will be carried un-altered to cqe. I plan to store the handle which gives us access to the other data. We can add all required data to user data use just io_uring and we will still be able to do everything, but I just realised this while writing and need to think about it more, IMO operations vector approach makes code more understandable and simpler.
+Events are `cqe` (we get a completion queue entry for a request we submit to iouring) we can attach some data with submission queue entry SQE which will be carried un-altered to cqe. I plan to store the handle which gives us access to the other data. We can add all required data to data and just use iouring and we will still be able to do everything, but I just realised this while writing and need to think about it more, IMO operations vector approach makes code more understandable and simpler.
 
 Error events are `cqe error` and `error` later represents NBD error like invalid read/write.
