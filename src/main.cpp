@@ -27,6 +27,7 @@ int main(int argc, char **argv) {
   }
   const off_t total_size = nbd_src.get_size();
   off_t offset = 0, bytes_left = total_size;
+  int queued_requests = 0;
 
   io_uring_queue_exit(&ring);
   return 0;

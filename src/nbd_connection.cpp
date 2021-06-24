@@ -56,15 +56,3 @@ NbdConnection::NbdConnection(const std::string &&name, const int port, io_uring 
 
 NbdConnection::~NbdConnection() { close(socket_fd); }
 
-int NbdConnection::submit_read_request(u_int64_t p_handle, u_int64_t p_offset,
-                                       u_int32_t p_length) {
-  const RequestHeader rqh =
-      RequestHeader::create_network_byteordered(0, 0, p_handle, p_offset, p_length);
-
-  io_uring_sqe *sqe = io_uring_get_sqe(ring_ptr);
-
-  io_uring_prep_send(sqe, socket_fd, &rqh, sizeof(rqh), 0);
-  io_uring_submit(ring_ptr);
-
-  return 0;
-}
