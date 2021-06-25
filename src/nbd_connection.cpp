@@ -14,8 +14,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-NbdConnection::NbdConnection(const std::string &&name, const int port, io_uring *ring)
-    : ring_ptr{ring}, name{name} {
+NbdConnection::NbdConnection(const std::string &&name, const int port)
+    : name{name} {
   socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 
   if (socket_fd == -1) {
@@ -31,7 +31,8 @@ NbdConnection::NbdConnection(const std::string &&name, const int port, io_uring 
     exit(1);
   }
 
-  int connection_result = ::connect(socket_fd, (struct sockaddr *)(&addr), sizeof(addr));
+  int connection_result =
+      ::connect(socket_fd, (struct sockaddr *)(&addr), sizeof(addr));
   if (connection_result == -1) {
     fprintf(stderr, "Problem connecting to unix socket");
     exit(2);
@@ -43,7 +44,8 @@ NbdConnection::NbdConnection(const std::string &&name, const int port, io_uring 
   offer.hostify();
 
   if (bytes_read != 152) {
-    fprintf(stderr, "Error: %d bytes read instead of valid 152 bytes", bytes_read);
+    fprintf(stderr, "Error: %d bytes read instead of valid 152 bytes",
+            bytes_read);
     exit(3);
   }
 
@@ -55,4 +57,3 @@ NbdConnection::NbdConnection(const std::string &&name, const int port, io_uring 
 }
 
 NbdConnection::~NbdConnection() { close(socket_fd); }
-

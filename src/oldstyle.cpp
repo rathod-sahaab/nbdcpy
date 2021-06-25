@@ -23,8 +23,10 @@ void print_server_offer(const OldstyleServerOffer &server_offer) {
   fmt::print("{} ({:#x})\n", magic_string, server_offer.magic);
   fmt::print("{:#x}\n", server_offer.cliserv_magic);
   fmt::print("{}\n", server_offer.export_size);
-  const auto bits = std::bitset<32>(server_offer.flags);
-  fmt::print("0b{}\n", bits.to_string());
+  const auto gbits = std::bitset<16>(server_offer.gflags);
+  fmt::print("0b{}\n", gbits.to_string());
+  const auto ebits = std::bitset<16>(server_offer.eflags);
+  fmt::print("0b{}\n", ebits.to_string());
 
   return;
 }

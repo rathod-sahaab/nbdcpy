@@ -1,14 +1,29 @@
 #ifndef NBD_TYPES_HPP
 #define NBD_TYPES_HPP
 /**
- * This file contains various nbd types and constants which are used to submit requests
- * and read responses from the nbd server. The types are customised for usage by client
- * additional properties and functions should be added for use by the server.
+ * This file contains various nbd types and constants which are used to submit
+ * requests and read responses from the nbd server. The types are customised for
+ * usage by client additional properties and functions should be added for use
+ * by the server.
  */
 
 #include <endian.h>
 #include <netinet/in.h>
 #include <sys/types.h>
+
+// clang-format off
+#define NBD_FLAG_HAS_FLAGS         (1 << 0)
+#define NBD_FLAG_READ_ONLY         (1 << 1)
+#define NBD_FLAG_SEND_FLUSH        (1 << 2)
+#define NBD_FLAG_SEND_FUA          (1 << 3)
+#define NBD_FLAG_ROTATIONAL        (1 << 4)
+#define NBD_FLAG_SEND_TRIM         (1 << 5)
+#define NBD_FLAG_SEND_WRITE_ZEROES (1 << 6)
+#define NBD_FLAG_SEND_DF           (1 << 7)
+#define NBD_FLAG_CAN_MULTI_CONN    (1 << 8)
+#define NBD_FLAG_SEND_CACHE        (1 << 10)
+#define NBD_FLAG_SEND_FAST_ZERO    (1 << 11)
+// clang-format on
 
 /**
  * NBD request magic in host's format/byte-order
@@ -43,20 +58,23 @@ struct RequestHeader {
   u_int32_t length;
 
   /*
-   * You cant create default object, as it's sent over network, byteorder has to be
-   * modified.
+   * You cant create default object, as it's sent over network, byteorder has to
+   * be modified.
    */
   RequestHeader() = delete;
 
   /**
    * Use this to create RequestHeader in network byteorder.
    */
-  static RequestHeader create_network_byteordered(u_int16_t p_command, u_int16_t p_type,
-                                                  u_int64_t p_handle, u_int64_t p_offset,
+  static RequestHeader create_network_byteordered(u_int16_t p_command,
+                                                  u_int16_t p_type,
+                                                  u_int64_t p_handle,
+                                                  u_int64_t p_offset,
                                                   u_int32_t p_length) {
-    // As this data-structure is meant to be sent over the nework we only allow it to be
-    // created by this factory function. we can do this in constructor but it would have
-    // hidden the fact that variables are in network byte-order and hence are tainted.
+    // As this data-structure is meant to be sent over the nework we only allow
+    // it to be created by this factory function. we can do this in constructor
+    // but it would have hidden the fact that variables are in network
+    // byte-order and hence are tainted.
 
     p_command = htons(p_command);
     p_type = htons(p_type);
@@ -68,19 +86,16 @@ struct RequestHeader {
 
 private:
   /**
-   * Create RequestHeader object, we don't want people to use it because for sending
-   * it should be in network byte-order. Hence we have a factory function that creates it
-   * for us.
+   * Create RequestHeader object, we don't want people to use it because for
+   * sending it should be in network byte-order. Hence we have a factory
+   * function that creates it for us.
    */
   RequestHeader(u_int16_t p_command, u_int16_t p_type, u_int64_t p_handle,
                 u_int64_t p_offset, u_int32_t p_length)
-      : command_flags{p_command},
-        type{p_type},
-        handle{p_handle},
-        offset{p_offset},
-        length{p_length} {}
+      : command_flags{p_command}, type{p_type}, handle{p_handle},
+        offset{p_offset}, length{p_length} {}
 
-} __attribute__((packed));
+} __attribute__((__packed__));
 
 /**
  * Header to extract when we receive a reply from the server
@@ -94,8 +109,8 @@ struct SimpleReplyHeader {
   u_int64_t handle;
 
   /**
-   * When read from network, byteorder is in big-endian format so we fix the order to get
-   * correct values.
+   * When read from network, byteorder is in big-endian format so we fix the
+   * order to get correct values.
    */
   void hostify() {
     if (is_hostified()) {
@@ -107,13 +122,15 @@ struct SimpleReplyHeader {
   }
 
   /**
-   * Returns if we already ran hostify we cant store the information in a boolean as it
-   * would have be a member variable and will cause faulty reads.
-   * Hence, we check if magic is in host format as if we already hostified it, we made it
-   * in host's byte order.
+   * Returns if we already ran hostify we cant store the information in a
+   * boolean as it would have be a member variable and will cause faulty reads.
+   * Hence, we check if magic is in host format as if we already hostified it,
+   * we made it in host's byte order.
    */
-  bool is_hostified() { return simple_reply_magic == NBD_SIMPLE_REPLY_MAGIC_HOST; }
-};
+  bool is_hostified() {
+    return simple_reply_magic == NBD_SIMPLE_REPLY_MAGIC_HOST;
+  }
+} __attribute__((__packed__));
 
 /**
  * Header to extract when we receive a reply from the server
@@ -129,8 +146,8 @@ struct StructuredReplyHeader {
   u_int32_t length;
 
   /**
-   * When read from network, byteorder is in big-endian format so we fix the order to get
-   * correct values.
+   * When read from network, byteorder is in big-endian format so we fix the
+   * order to get correct values.
    */
   void hostify() {
     if (is_hostified()) {
@@ -145,12 +162,12 @@ struct StructuredReplyHeader {
   }
 
   /**
-   * Returns if we already ran hostify we cant store the information in a boolean as it
-   * would have be a member variable and will cause faulty reads.
-   * Hence, we check if magic is in host format as if we already hotified it, we made it
-   * in host's byte order.
+   * Returns if we already ran hostify we cant store the information in a
+   * boolean as it would have be a member variable and will cause faulty reads.
+   * Hence, we check if magic is in host format as if we already hotified it, we
+   * made it in host's byte order.
    */
   bool is_hostified() { return magic == NBD_STRUCTURED_REPLY_MAGIC_HOST; }
-} __attribute__((packed));
+} __attribute__((__packed__));
 
 #endif // NBD_TYPES_HPP
