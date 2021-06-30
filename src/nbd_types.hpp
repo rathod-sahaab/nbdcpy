@@ -23,6 +23,33 @@
 #define NBD_FLAG_CAN_MULTI_CONN    (1 << 8)
 #define NBD_FLAG_SEND_CACHE        (1 << 10)
 #define NBD_FLAG_SEND_FAST_ZERO    (1 << 11)
+
+/* NBD commands. */
+#define NBD_CMD_READ              0
+#define NBD_CMD_WRITE             1
+#define NBD_CMD_DISC              2 /* Disconnect. */
+#define NBD_CMD_FLUSH             3
+#define NBD_CMD_TRIM              4
+#define NBD_CMD_CACHE             5
+#define NBD_CMD_WRITE_ZEROES      6
+#define NBD_CMD_BLOCK_STATUS      7
+
+#define NBD_CMD_FLAG_FUA       (1<<0)
+#define NBD_CMD_FLAG_NO_HOLE   (1<<1)
+#define NBD_CMD_FLAG_DF        (1<<2)
+#define NBD_CMD_FLAG_REQ_ONE   (1<<3)
+#define NBD_CMD_FLAG_FAST_ZERO (1<<4)
+
+/* NBD error codes. */
+#define NBD_SUCCESS     0
+#define NBD_EPERM       1
+#define NBD_EIO         5
+#define NBD_ENOMEM     12
+#define NBD_EINVAL     22
+#define NBD_ENOSPC     28
+#define NBD_EOVERFLOW  75
+#define NBD_ENOTSUP    95
+#define NBD_ESHUTDOWN 108
 // clang-format on
 
 /**
@@ -66,7 +93,7 @@ struct RequestHeader {
   /**
    * Use this to create RequestHeader in network byteorder.
    */
-  static RequestHeader create_network_byteordered(u_int16_t p_command,
+  static RequestHeader create_network_byteordered(u_int16_t p_command_flags,
                                                   u_int16_t p_type,
                                                   u_int64_t p_handle,
                                                   u_int64_t p_offset,
@@ -76,12 +103,12 @@ struct RequestHeader {
     // but it would have hidden the fact that variables are in network
     // byte-order and hence are tainted.
 
-    p_command = htons(p_command);
+    p_command_flags = htons(p_command_flags);
     p_type = htons(p_type);
     p_handle = htobe64(p_handle);
     p_offset = htobe64(p_offset);
     p_length = htobe32(p_length);
-    return RequestHeader(p_command, p_type, p_handle, p_offset, p_length);
+    return RequestHeader(p_command_flags, p_type, p_handle, p_offset, p_length);
   }
 
 private:

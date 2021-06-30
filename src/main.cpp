@@ -40,6 +40,7 @@ int main(int argc, char **argv) {
   for (int i = 0; i < MAX_INFLIGHT_REQUESTS; ++i) {
     auto &operation = operations[i];
 
+    operation.handle = i;
     operation.state = OperationState::REQUESTING;
     operation.offset = offset;
     operation.length = std::min(MAX_PACKET_SIZE, bytes_left);
@@ -55,12 +56,27 @@ int main(int argc, char **argv) {
   io_uring_submit(&ring);
 
   while (bytes_left > 0) {
-    // must wait for a completion as there are already MAX_INFLIGHT_REQUESTS in
-    // the io_uring
-    struct io_uring_cqe *cqe = nullptr;
-    // cqe pointer's value is changed by wait_cqe
+    /*
+     * here 'operation' is a complete copy operation
+     *
+     * This loop waits for the operations completion and processes their
+     * various stages. After one operation is complete is starts another
+     * operation reusing complete process's slot in operations vector.
+     *
+     * But, after this loop there will be operations that are pending i.e. are
+     * in REQUESTING, READING, WRITING, CONFIRMING state. But they will be the
+     * final operations i.e. there will be no more work after they are done
+     * being processed. Hence, one more loop will be required to process those
+     * half completed operation.
+     */
 
+    struct io_uring_cqe *cqe = nullptr; // mutated by io_uring_wait_cqe
+    /*
+     * We must wait for a completion as there are already MAX_INFLIGHT_REQUESTS
+     * in the io_uring.
+     */
     int ret = io_uring_wait_cqe(&ring, &cqe);
+
     if (ret != 0) {
       perror("io_uring_cqe ret");
       exit(1);
@@ -70,8 +86,8 @@ int main(int argc, char **argv) {
       exit(1);
     }
 
-    // we insert operation_ptr so we are sure and hence casting is safe
-    Operation *operation_ptr = (Operation *)io_uring_cqe_get_data(cqe);
+    // we inserted Operation* hence casting is safe
+    Operation *const operation_ptr = (Operation *)io_uring_cqe_get_data(cqe);
 
     // operation state is actually the previous state so we need to advance it
     // now
@@ -82,17 +98,29 @@ int main(int argc, char **argv) {
       break;
     case OperationState::READING:
       // TODO: enqueue socket.send to send data to destination
+      operation_ptr->state = OperationState::WRITING;
       break;
     case OperationState::WRITING:
       // TODO: enqueue socket.recv to read confirmation from destination
+      operation_ptr->state = OperationState::CONFIRMING;
       break;
     case OperationState::CONFIRMING:
       // TODO: enqueue new read request for another offset (next request).
+      operation_ptr->state = OperationState::REQUESTING;
+      // if more read requests can be made
+      // otherwise
+      operation_ptr->state = OperationState::EMPTY;
       break;
     case OperationState::EMPTY:
-      // This should not be encountered if there are still request
+      // This should not be encountered if there are still requests to enqueue
       break;
     }
+
+    io_uring_cqe_seen(&ring, cqe);
+  }
+
+  while (io_uring_cq_ready(&ring)) {
+    // process pending events
   }
 
   io_uring_queue_exit(&ring);

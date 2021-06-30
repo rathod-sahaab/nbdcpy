@@ -10,7 +10,7 @@ void enqueue_read_request(NbdConnection &conn, io_uring *ring_ptr,
                           u_int32_t p_length, Operation *operation_ptr) {
 
   const RequestHeader rqh = RequestHeader::create_network_byteordered(
-      0, 0, p_handle, p_offset, p_length);
+      0, NBD_CMD_READ, p_handle, p_offset, p_length);
 
   io_uring_sqe *sqe = io_uring_get_sqe(ring_ptr);
 
@@ -30,3 +30,5 @@ void submit_read_request(NbdConnection &conn, io_uring *ring_ptr,
 }
 
 void submit_read() {}
+
+void submit_write() {}
