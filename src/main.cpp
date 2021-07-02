@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <liburing.h>
+#include <sys/socket.h>
 #include <vector>
 
 constexpr const off_t MAX_PACKET_SIZE = 512; // bytes
@@ -34,93 +35,36 @@ int main(int argc, char **argv) {
   off_t offset = 0, bytes_left = total_size;
   int queued_requests = 0;
 
-  std::vector<Operation> operations(MAX_INFLIGHT_REQUESTS);
+  const RequestHeader rqh = RequestHeader::create_network_byteordered(
+      0, NBD_CMD_READ, 0, 0, MAX_PACKET_SIZE);
 
-  // fill the operations vector first
-  for (int i = 0; i < MAX_INFLIGHT_REQUESTS; ++i) {
-    auto &operation = operations[i];
-
-    operation.handle = i;
-    operation.state = OperationState::REQUESTING;
-    operation.offset = offset;
-    operation.length = std::min(MAX_PACKET_SIZE, bytes_left);
-
-    enqueue_read_request(nbd_src, &ring, i, operation.offset, operation.length,
-                         &operations[i]);
-
-    offset += MAX_PACKET_SIZE;
-    bytes_left -= MAX_PACKET_SIZE;
+  if (send(nbd_src.get_socket(), &rqh, sizeof(rqh), 0) == -1) {
+    fmt::print("ERROR!");
   }
 
-  // submit the enqueued operations above to io_ring
-  io_uring_submit(&ring);
+  SimpleReplyHeader srh;
+  recv(nbd_src.get_socket(), &srh, sizeof(srh), 0);
+  srh.hostify();
 
-  while (bytes_left > 0) {
-    /*
-     * here 'operation' is a complete copy operation
-     *
-     * This loop waits for the operations completion and processes their
-     * various stages. After one operation is complete is starts another
-     * operation reusing complete process's slot in operations vector.
-     *
-     * But, after this loop there will be operations that are pending i.e. are
-     * in REQUESTING, READING, WRITING, CONFIRMING state. But they will be the
-     * final operations i.e. there will be no more work after they are done
-     * being processed. Hence, one more loop will be required to process those
-     * half completed operation.
-     */
+  const auto srh_copy = srh;
 
-    struct io_uring_cqe *cqe = nullptr; // mutated by io_uring_wait_cqe
-    /*
-     * We must wait for a completion as there are already MAX_INFLIGHT_REQUESTS
-     * in the io_uring.
-     */
-    int ret = io_uring_wait_cqe(&ring, &cqe);
+  fmt::print("Reply Header\n"
+             "{:#x}\n"
+             "{:#b} {}\n"
+             "{}\n",
+             srh_copy.simple_reply_magic, srh_copy.errors, srh_copy.errors,
+             srh_copy.handle);
 
-    if (ret != 0) {
-      perror("io_uring_cqe ret");
-      exit(1);
-    }
-    if (!cqe) {
-      perror("io_uring_cqe cqe");
-      exit(1);
-    }
-
-    // we inserted Operation* hence casting is safe
-    Operation *const operation_ptr = (Operation *)io_uring_cqe_get_data(cqe);
-
-    // operation state is actually the previous state so we need to advance it
-    // now
-    switch (operation_ptr->state) {
-    case OperationState::REQUESTING:
-      // TODO: submit socket.recv to read from source.
-      operation_ptr->state = OperationState::READING;
-      break;
-    case OperationState::READING:
-      // TODO: enqueue socket.send to send data to destination
-      operation_ptr->state = OperationState::WRITING;
-      break;
-    case OperationState::WRITING:
-      // TODO: enqueue socket.recv to read confirmation from destination
-      operation_ptr->state = OperationState::CONFIRMING;
-      break;
-    case OperationState::CONFIRMING:
-      // TODO: enqueue new read request for another offset (next request).
-      operation_ptr->state = OperationState::REQUESTING;
-      // if more read requests can be made
-      // otherwise
-      operation_ptr->state = OperationState::EMPTY;
-      break;
-    case OperationState::EMPTY:
-      // This should not be encountered if there are still requests to enqueue
-      break;
-    }
-
-    io_uring_cqe_seen(&ring, cqe);
+  if (srh_copy.errors != 0) {
+    fmt::print("SRH error occured {:#b}\n", srh_copy.errors);
   }
 
-  while (io_uring_cq_ready(&ring)) {
-    // process pending events
+  unsigned char *data = (unsigned char *)malloc(MAX_PACKET_SIZE);
+  recv(nbd_src.get_socket(), data, MAX_PACKET_SIZE, 0);
+
+  fmt::print("Data\n");
+  for (int i = 0; i < MAX_PACKET_SIZE; ++i) {
+    fmt::print("{:#x}{}", data[i], i % 2 ? " " : ".");
   }
 
   io_uring_queue_exit(&ring);
