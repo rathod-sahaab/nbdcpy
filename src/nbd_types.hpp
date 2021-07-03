@@ -110,6 +110,27 @@ struct RequestHeader {
     p_length = htobe32(p_length);
     return RequestHeader(p_command_flags, p_type, p_handle, p_offset, p_length);
   }
+  /**
+   * Use this to create RequestHeader in network byteorder.
+   */
+  static RequestHeader *allocate_network_byteordered(u_int16_t p_command_flags,
+                                                     u_int16_t p_type,
+                                                     u_int64_t p_handle,
+                                                     u_int64_t p_offset,
+                                                     u_int32_t p_length) {
+    // As this data-structure is meant to be sent over the nework we only allow
+    // it to be created by this factory function. we can do this in constructor
+    // but it would have hidden the fact that variables are in network
+    // byte-order and hence are tainted.
+
+    p_command_flags = htons(p_command_flags);
+    p_type = htons(p_type);
+    p_handle = htobe64(p_handle);
+    p_offset = htobe64(p_offset);
+    p_length = htobe32(p_length);
+    return new RequestHeader(p_command_flags, p_type, p_handle, p_offset,
+                             p_length);
+  }
 
 private:
   /**

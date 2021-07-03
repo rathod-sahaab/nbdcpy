@@ -5,10 +5,12 @@
 #include "oldstyle.hpp"
 #include "operation.hpp"
 #include "uring_ops.hpp"
+#include "uring_user_data.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <liburing.h>
+#include <netinet/in.h>
 #include <vector>
 
 constexpr const off_t MAX_PACKET_SIZE = 512; // bytes
@@ -44,6 +46,18 @@ int main(int argc, char **argv) {
     operation.state = OperationState::REQUESTING;
     operation.offset = offset;
     operation.length = std::min(MAX_PACKET_SIZE, bytes_left);
+
+    // we read Replies from source in this buffer
+    // and use this buffer to send data to destination
+    // our max data size can be MAX_PACKET_SIZE add to that the RequestHeader
+    // READ reply from source: 	     HEADER___16bytes............DATA________
+    // WRITE request to destination: HEADER___28bytes____________DATA________
+    // '.' represents useless bytes, other chars useful bytes
+    // Since SimpleReplyHeader is only 16 bytes while RequestHeader is 28
+    // RequestHeader allocating for RequestHeader is suffice.
+    // CAUTION: You MUST always offset 28 bytes for data in any case
+    // void* data = buffer + 28
+    operation.buffer = malloc(sizeof(RequestHeader) + MAX_PACKET_SIZE);
 
     enqueue_read_request(nbd_src, &ring, i, operation.offset, operation.length,
                          &operations[i]);
@@ -86,34 +100,54 @@ int main(int argc, char **argv) {
       exit(1);
     }
 
-    // we inserted Operation* hence casting is safe
-    Operation *const operation_ptr = (Operation *)io_uring_cqe_get_data(cqe);
+    // we insert Operation* or nullptr hence casting is safe
+    UringUserData *const uring_user_data =
+        (UringUserData *)io_uring_cqe_get_data(cqe);
 
-    // operation state is actually the previous state so we need to advance it
-    // now
-    switch (operation_ptr->state) {
-    case OperationState::REQUESTING:
-      // TODO: submit socket.recv to read from source.
-      operation_ptr->state = OperationState::READING;
-      break;
-    case OperationState::READING:
-      // TODO: enqueue socket.send to send data to destination
-      operation_ptr->state = OperationState::WRITING;
-      break;
-    case OperationState::WRITING:
-      // TODO: enqueue socket.recv to read confirmation from destination
-      operation_ptr->state = OperationState::CONFIRMING;
-      break;
-    case OperationState::CONFIRMING:
-      // TODO: enqueue new read request for another offset (next request).
-      operation_ptr->state = OperationState::REQUESTING;
-      // if more read requests can be made
-      // otherwise
-      operation_ptr->state = OperationState::EMPTY;
-      break;
-    case OperationState::EMPTY:
-      // This should not be encountered if there are still requests to enqueue
-      break;
+    if (uring_user_data->is_read) {
+      // read operation, data field points to buffer where SimpleReplyHeader is
+      // read
+      SimpleReplyHeader *const srh = (SimpleReplyHeader *)uring_user_data->data;
+      srh->hostify();
+
+      Operation &operation_ref = operations[srh->handle];
+
+      delete srh;
+    } else {
+      // write operation data points to request which this belongs to
+
+      RequestHeader *const request_ptr = (RequestHeader *)uring_user_data->data;
+
+      // every field was created in network byte order.
+      Operation &operation = operations[be64toh(request_ptr->handle)];
+      // operation state is actually the previous state so we need to advance it
+      switch (operation.state) {
+      case OperationState::REQUESTING:
+        // TODO: submit socket.recv to read from source.
+        operation.state = OperationState::READING;
+        break;
+      case OperationState::READING:
+        // This won't be encountered as io_uring can't determine for which
+        // request was response to it just reads when a read is available hence
+        // there is no point in attaching operation_ptr to it as it would be
+        // meaningless.
+        //
+        // We just read a header from socket and use the handle field of header
+        // to determine which request was response for.
+        break;
+      case OperationState::WRITING:
+        // TODO: enqueue socket.recv to read confirmation from destination
+        operation.state = OperationState::CONFIRMING;
+        break;
+      case OperationState::CONFIRMING:
+        // Same as READING
+        break;
+      case OperationState::EMPTY:
+        // This should not be encountered if there are still requests to enqueue
+        break;
+      }
+
+      delete request_ptr;
     }
 
     io_uring_cqe_seen(&ring, cqe);
@@ -121,6 +155,12 @@ int main(int argc, char **argv) {
 
   while (io_uring_cq_ready(&ring)) {
     // process pending events
+  }
+
+  for (const auto &operation : operations) {
+    // Were exiting so it's not necessary to free the buffers but free every
+    // malloc anyways
+    free(operation.buffer);
   }
 
   io_uring_queue_exit(&ring);
