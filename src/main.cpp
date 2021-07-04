@@ -63,8 +63,8 @@ int main(int argc, char **argv) {
 
     enqueue_read_request(nbd_src, &ring, i, operation.offset, operation.length);
 
-    offset += MAX_PACKET_SIZE;
-    bytes_left -= MAX_PACKET_SIZE;
+    offset += operation.length;
+    bytes_left -= operation.length;
   }
 
   // submit the enqueued operations above to io_ring
@@ -136,6 +136,20 @@ int main(int argc, char **argv) {
       } else {
         // can only be confirming, start another request at new offset if all of
         // the file is read set empty
+        if (bytes_left > 0) {
+          const auto length = std::min(MAX_PACKET_SIZE, bytes_left);
+
+          enqueue_read_request(nbd_src, &ring, operation_ref.handle, offset,
+                               length);
+          operation_ref.state = OperationState::REQUESTING;
+
+          offset += length;
+          bytes_left -= length;
+
+        } else {
+          operation_ref.state = OperationState::EMPTY;
+          continue;
+        }
       }
 
       delete srh;
