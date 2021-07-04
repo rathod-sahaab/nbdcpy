@@ -9,11 +9,11 @@
 
 constexpr const bool IS_READ = true, IS_WRITE = true;
 
-void enqueue_read_request(NbdConnection &conn, io_uring *ring_ptr,
-                          u_int64_t p_handle, u_int64_t p_offset,
-                          u_int32_t p_length) {
+void enqueue_send_read_request(NbdConnection &conn, io_uring *ring_ptr,
+                               u_int64_t p_handle, u_int64_t p_offset,
+                               u_int32_t p_length) {
 
-  // Can't allocate this on the stack because io_uring might process is after
+  // Can't allocate this on the stack because io_uring might process it after
   // the function's lifetime
   // TODO: delete/free this memory
   RequestHeader *const rqh = RequestHeader::allocate_network_byteordered(
@@ -35,7 +35,7 @@ void enqueue_read_request(NbdConnection &conn, io_uring *ring_ptr,
 void submit_read_request(NbdConnection &conn, io_uring *ring_ptr,
                          u_int64_t p_handle, u_int64_t p_offset,
                          u_int32_t p_length) {
-  enqueue_read_request(conn, ring_ptr, p_handle, p_offset, p_length);
+  enqueue_send_read_request(conn, ring_ptr, p_handle, p_offset, p_length);
   io_uring_submit(ring_ptr);
 }
 

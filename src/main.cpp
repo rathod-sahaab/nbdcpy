@@ -61,7 +61,8 @@ int main(int argc, char **argv) {
     // void* data = buffer + 28 i.e. buffer + sizeof(RequestHeader)
     operation.buffer = (char *)malloc(sizeof(RequestHeader) + MAX_PACKET_SIZE);
 
-    enqueue_read_request(nbd_src, &ring, i, operation.offset, operation.length);
+    enqueue_send_read_request(nbd_src, &ring, i, operation.offset,
+                              operation.length);
 
     offset += operation.length;
     bytes_left -= operation.length;
@@ -141,8 +142,8 @@ int main(int argc, char **argv) {
           // start a new request
           const auto length = std::min(MAX_PACKET_SIZE, bytes_left);
 
-          enqueue_read_request(nbd_src, &ring, operation_ref.handle, offset,
-                               length);
+          enqueue_send_read_request(nbd_src, &ring, operation_ref.handle,
+                                    offset, length);
           operation_ref.state = OperationState::REQUESTING;
 
           offset += length;
@@ -164,15 +165,18 @@ int main(int argc, char **argv) {
       Operation &operation_ref = operations[be64toh(request_ptr->handle)];
       // operation state is actually the previous state so we need to advance it
       if (operation_ref.state == OperationState::REQUESTING) {
-        // TODO: submit socket.recv to read from source.
+        enqueue_read_header(nbd_src, &ring);
         operation_ref.state = OperationState::READING;
-      } else {
-        // OperationState can be only writing
-        operation_ref.state = OperationState::CONFIRMING;
-        // TODO: enqueue socket.recv to read confirmation from destination
-      }
+        io_uring_submit(&ring);
 
-      delete request_ptr;
+        // only delete here because writing used operation_ref.buffer
+        delete request_ptr;
+      } else {
+        // writing
+        enqueue_read_header(nbd_dest, &ring);
+        operation_ref.state = OperationState::CONFIRMING;
+        io_uring_submit(&ring);
+      }
     }
 
     io_uring_cqe_seen(&ring, cqe);
