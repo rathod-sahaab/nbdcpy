@@ -11,8 +11,8 @@
  * NOTE: does not call io_uring_submit.
  */
 void enqueue_read_request(NbdConnection &conn, io_uring *ring_ptr,
-                        u_int64_t p_handle, u_int64_t p_offset,
-                        u_int32_t p_length, Operation *operation_ptr);
+                          u_int64_t p_handle, u_int64_t p_offset,
+                          u_int32_t p_length);
 
 /**
  * Same as enquqe_read_request but also call io_uring_submit.
@@ -20,7 +20,11 @@ void enqueue_read_request(NbdConnection &conn, io_uring *ring_ptr,
  * io_uring submissions.
  */
 void submit_read_request(NbdConnection &conn, io_uring *ring_ptr,
-                        u_int64_t p_handle, u_int64_t p_offset,
-                        u_int32_t p_length, Operation *operation_ptr);
+                         u_int64_t p_handle, u_int64_t p_offset,
+                         u_int32_t p_length);
+
+void enqueue_write(const NbdConnection &conn, io_uring *ring_ptr,
+                   u_int64_t p_handle, u_int64_t p_offset, u_int32_t p_length,
+                   void *buffer);
 
 #endif // URING_OPS_HPP

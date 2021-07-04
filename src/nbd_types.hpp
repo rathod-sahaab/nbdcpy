@@ -132,6 +132,14 @@ struct RequestHeader {
                              p_length);
   }
 
+  void networkify() {
+    command_flags = htons(command_flags);
+    type = htons(type);
+    handle = htobe64(handle);
+    offset = htobe64(offset);
+    length = htonl(length);
+  }
+
 private:
   /**
    * Create RequestHeader object, we don't want people to use it because for

@@ -11,6 +11,8 @@
 #include <cstdlib>
 #include <liburing.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #include <vector>
 
 constexpr const off_t MAX_PACKET_SIZE = 512; // bytes
@@ -56,11 +58,10 @@ int main(int argc, char **argv) {
     // Since SimpleReplyHeader is only 16 bytes while RequestHeader is 28
     // RequestHeader allocating for RequestHeader is suffice.
     // CAUTION: You MUST always offset 28 bytes for data in any case
-    // void* data = buffer + 28
-    operation.buffer = malloc(sizeof(RequestHeader) + MAX_PACKET_SIZE);
+    // void* data = buffer + 28 i.e. buffer + sizeof(RequestHeader)
+    operation.buffer = (char *)malloc(sizeof(RequestHeader) + MAX_PACKET_SIZE);
 
-    enqueue_read_request(nbd_src, &ring, i, operation.offset, operation.length,
-                         &operations[i]);
+    enqueue_read_request(nbd_src, &ring, i, operation.offset, operation.length);
 
     offset += MAX_PACKET_SIZE;
     bytes_left -= MAX_PACKET_SIZE;
@@ -111,6 +112,31 @@ int main(int argc, char **argv) {
       srh->hostify();
 
       Operation &operation_ref = operations[srh->handle];
+
+      // TODO: check for errors
+      if (operation_ref.state == OperationState::READING) {
+        const auto ret = recv(nbd_src.get_socket(),
+                              operation_ref.buffer + sizeof(RequestHeader),
+                              operation_ref.length, 0);
+        if (ret < 0) {
+          fmt::print("recv error\n");
+          exit(1);
+        }
+        if (ret < operation_ref.length) {
+          fmt::print("Error: less than operation_ref.length bytes read\n");
+          exit(1);
+        }
+
+        enqueue_write(nbd_dest, &ring, operation_ref.handle,
+                      operation_ref.offset, operation_ref.length,
+                      operation_ref.buffer);
+
+        operation_ref.state = OperationState::WRITING;
+
+      } else {
+        // can only be confirming, start another request at new offset if all of
+        // the file is read set empty
+      }
 
       delete srh;
     } else {

@@ -5,10 +5,13 @@
 #include <cstdlib>
 #include <cstring>
 #include <liburing.h>
+#include <liburing/io_uring.h>
+
+constexpr const bool IS_READ = true, IS_WRITE = true;
 
 void enqueue_read_request(NbdConnection &conn, io_uring *ring_ptr,
                           u_int64_t p_handle, u_int64_t p_offset,
-                          u_int32_t p_length, Operation *operation_ptr) {
+                          u_int32_t p_length) {
 
   // Can't allocate this on the stack because io_uring might process is after
   // the function's lifetime
@@ -19,7 +22,8 @@ void enqueue_read_request(NbdConnection &conn, io_uring *ring_ptr,
   io_uring_sqe *sqe = io_uring_get_sqe(ring_ptr);
 
   // Added rqh to delete on completion
-  UringUserData *uring_user_data = new UringUserData(rqh, false);
+  UringUserData *uring_user_data = new UringUserData(rqh, IS_WRITE);
+  // IS_WRITE because we send/write the socket
 
   io_uring_sqe_set_data(sqe, uring_user_data);
   // to determine which nbd request does the entry belongs to
@@ -30,12 +34,41 @@ void enqueue_read_request(NbdConnection &conn, io_uring *ring_ptr,
 }
 void submit_read_request(NbdConnection &conn, io_uring *ring_ptr,
                          u_int64_t p_handle, u_int64_t p_offset,
-                         u_int32_t p_length, Operation *operation_ptr) {
-  enqueue_read_request(conn, ring_ptr, p_handle, p_offset, p_length,
-                       operation_ptr);
+                         u_int32_t p_length) {
+  enqueue_read_request(conn, ring_ptr, p_handle, p_offset, p_length);
   io_uring_submit(ring_ptr);
 }
 
 void enqueue_read_header(NbdConnection &conn, io_uring *ring_ptr) {
   SimpleReplyHeader *srh_ptr = new SimpleReplyHeader();
+  io_uring_sqe *sqe = io_uring_get_sqe(ring_ptr);
+  UringUserData *uring_user_data = new UringUserData(srh_ptr, IS_READ);
+
+  io_uring_sqe_set_data(sqe, uring_user_data);
+
+  io_uring_prep_read(sqe, conn.get_socket(), srh_ptr, sizeof(SimpleReplyHeader),
+                     0);
+}
+
+void enqueue_write(const NbdConnection &conn, io_uring *ring_ptr,
+                   u_int64_t p_handle, u_int64_t p_offset, u_int32_t p_length,
+                   void *buffer) {
+  // prepare buffer will only overwrite the first 28 bytes
+  RequestHeader *const rqh = (RequestHeader *)buffer;
+
+  rqh->command_flags = 0;
+  rqh->type = NBD_CMD_WRITE;
+  rqh->handle = p_handle;
+  rqh->offset = p_offset;
+  rqh->length = p_length;
+
+  rqh->networkify();
+
+  io_uring_sqe *sqe = io_uring_get_sqe(ring_ptr);
+  UringUserData *uring_user_data = new UringUserData(buffer, IS_WRITE);
+
+  io_uring_sqe_set_data(sqe, uring_user_data);
+
+  io_uring_prep_send(sqe, conn.get_socket(), buffer,
+                     sizeof(RequestHeader) + p_length, 0);
 }

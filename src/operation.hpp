@@ -20,7 +20,7 @@ struct Operation {
   u_int64_t offset;
   u_int32_t length;
   OperationState state;
-  void *buffer; // not sure
+  char *buffer; // not sure
 } __attribute__((__packed__));
 
 #endif // OPERATION_HPP
