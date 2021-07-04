@@ -132,11 +132,13 @@ int main(int argc, char **argv) {
                       operation_ref.buffer);
 
         operation_ref.state = OperationState::WRITING;
+        io_uring_submit(&ring);
 
       } else {
         // can only be confirming, start another request at new offset if all of
         // the file is read set empty
         if (bytes_left > 0) {
+          // start a new request
           const auto length = std::min(MAX_PACKET_SIZE, bytes_left);
 
           enqueue_read_request(nbd_src, &ring, operation_ref.handle, offset,
@@ -145,7 +147,7 @@ int main(int argc, char **argv) {
 
           offset += length;
           bytes_left -= length;
-
+          io_uring_submit(&ring);
         } else {
           operation_ref.state = OperationState::EMPTY;
           continue;
@@ -159,32 +161,15 @@ int main(int argc, char **argv) {
       RequestHeader *const request_ptr = (RequestHeader *)uring_user_data->data;
 
       // every field was created in network byte order.
-      Operation &operation = operations[be64toh(request_ptr->handle)];
+      Operation &operation_ref = operations[be64toh(request_ptr->handle)];
       // operation state is actually the previous state so we need to advance it
-      switch (operation.state) {
-      case OperationState::REQUESTING:
+      if (operation_ref.state == OperationState::REQUESTING) {
         // TODO: submit socket.recv to read from source.
-        operation.state = OperationState::READING;
-        break;
-      case OperationState::READING:
-        // This won't be encountered as io_uring can't determine for which
-        // request was response to it just reads when a read is available hence
-        // there is no point in attaching operation_ptr to it as it would be
-        // meaningless.
-        //
-        // We just read a header from socket and use the handle field of header
-        // to determine which request was response for.
-        break;
-      case OperationState::WRITING:
+        operation_ref.state = OperationState::READING;
+      } else {
+        // OperationState can be only writing
+        operation_ref.state = OperationState::CONFIRMING;
         // TODO: enqueue socket.recv to read confirmation from destination
-        operation.state = OperationState::CONFIRMING;
-        break;
-      case OperationState::CONFIRMING:
-        // Same as READING
-        break;
-      case OperationState::EMPTY:
-        // This should not be encountered if there are still requests to enqueue
-        break;
       }
 
       delete request_ptr;
