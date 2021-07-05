@@ -64,6 +64,7 @@ int main(int argc, char **argv) {
     enqueue_send_read_request(nbd_src, &ring, i, operation.offset,
                               operation.length);
 
+    queued_requests++;
     offset += operation.length;
     bytes_left -= operation.length;
   }
@@ -71,7 +72,7 @@ int main(int argc, char **argv) {
   // submit the enqueued operations above to io_ring
   io_uring_submit(&ring);
 
-  while (bytes_left > 0) {
+  while (bytes_left > 0 or queued_requests > 0) {
     /*
      * here 'operation' is a complete copy operation
      *
@@ -150,6 +151,7 @@ int main(int argc, char **argv) {
           bytes_left -= length;
           io_uring_submit(&ring);
         } else {
+          queued_requests--;
           operation_ref.state = OperationState::EMPTY;
           continue;
         }
@@ -180,10 +182,6 @@ int main(int argc, char **argv) {
     }
 
     io_uring_cqe_seen(&ring, cqe);
-  }
-
-  while (io_uring_cq_ready(&ring)) {
-    // process pending events
   }
 
   for (const auto &operation : operations) {
