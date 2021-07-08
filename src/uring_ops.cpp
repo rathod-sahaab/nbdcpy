@@ -22,8 +22,9 @@ void enqueue_send_read_request(NbdConnection &conn, io_uring *ring_ptr,
   // Can't allocate this on the stack because io_uring might process it
   // after the function's lifetime
   // TODO: delete/free this memory
-  RequestHeader *const rqh = RequestHeader::allocate_network_byteordered(
-      0, NBD_CMD_READ, p_handle, p_offset, p_length);
+  RequestHeader *const rqh =
+      new RequestHeader(0, NBD_CMD_READ, p_handle, p_offset, p_length);
+  rqh->networkify();
 
   io_uring_sqe *sqe = io_uring_get_sqe(ring_ptr);
 

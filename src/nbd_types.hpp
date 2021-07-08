@@ -66,7 +66,7 @@ constexpr const u_int32_t NBD_SIMPLE_REPLY_MAGIC_HOST = 0x67446698;
 constexpr const u_int32_t NBD_STRUCTURED_REPLY_MAGIC_HOST = 0x668e33ef;
 
 struct RequestHeader {
-  const u_int32_t magic = htobe32(NBD_REQUEST_MAGIC_HOST); // NBD_REQUEST_MAGIC
+  u_int32_t magic; // NBD_REQUEST_MAGIC
   u_int16_t command_flags;
   u_int16_t type;
   /**
@@ -90,67 +90,55 @@ struct RequestHeader {
    */
   RequestHeader() = delete;
 
-  /**
-   * Use this to create RequestHeader in network byteorder.
-   */
-  static RequestHeader create_network_byteordered(u_int16_t p_command_flags,
-                                                  u_int16_t p_type,
-                                                  u_int64_t p_handle,
-                                                  u_int64_t p_offset,
-                                                  u_int32_t p_length) {
-    // As this data-structure is meant to be sent over the nework we only allow
-    // it to be created by this factory function. we can do this in constructor
-    // but it would have hidden the fact that variables are in network
-    // byte-order and hence are tainted.
-
-    p_command_flags = htons(p_command_flags);
-    p_type = htons(p_type);
-    p_handle = htobe64(p_handle);
-    p_offset = htobe64(p_offset);
-    p_length = htobe32(p_length);
-    return RequestHeader(p_command_flags, p_type, p_handle, p_offset, p_length);
-  }
-  /**
-   * Use this to create RequestHeader in network byteorder.
-   */
-  static RequestHeader *allocate_network_byteordered(u_int16_t p_command_flags,
-                                                     u_int16_t p_type,
-                                                     u_int64_t p_handle,
-                                                     u_int64_t p_offset,
-                                                     u_int32_t p_length) {
-    // As this data-structure is meant to be sent over the nework we only allow
-    // it to be created by this factory function. we can do this in constructor
-    // but it would have hidden the fact that variables are in network
-    // byte-order and hence are tainted.
-
-    p_command_flags = htobe16(p_command_flags);
-    p_type = htobe16(p_type);
-    p_handle = htobe64(p_handle);
-    p_offset = htobe64(p_offset);
-    p_length = htobe32(p_length);
-    return new RequestHeader(p_command_flags, p_type, p_handle, p_offset,
-                             p_length);
-  }
-
-  void networkify() {
-    command_flags = htons(command_flags);
-    type = htons(type);
-    handle = htobe64(handle);
-    offset = htobe64(offset);
-    length = htonl(length);
-  }
-
-private:
-  /**
-   * Create RequestHeader object, we don't want people to use it because for
-   * sending it should be in network byte-order. Hence we have a factory
-   * function that creates it for us.
-   */
   RequestHeader(u_int16_t p_command, u_int16_t p_type, u_int64_t p_handle,
                 u_int64_t p_offset, u_int32_t p_length)
-      : command_flags{p_command}, type{p_type}, handle{p_handle},
-        offset{p_offset}, length{p_length} {}
+      : magic{NBD_REQUEST_MAGIC_HOST}, command_flags{p_command}, type{p_type},
+        handle{p_handle}, offset{p_offset}, length{p_length} {}
 
+  /**
+   * Just like the construct, created for using with malloc where you can't new
+   */
+  void intialise(u_int16_t p_command, u_int16_t p_type, u_int64_t p_handle,
+                 u_int64_t p_offset, u_int32_t p_length) {
+
+    magic = NBD_REQUEST_MAGIC_HOST;
+    command_flags = p_command;
+    type = p_type;
+    handle = p_handle;
+    offset = p_offset;
+    length = p_length;
+  }
+  /**
+   * Use this to encode RequestHeader in network byteorder.
+   */
+  void networkify() {
+    if (is_networkified()) {
+      return;
+    }
+    magic = htobe32(magic);
+    command_flags = htobe16(command_flags);
+    type = htobe16(type);
+    handle = htobe64(handle);
+    offset = htobe64(offset);
+    length = htobe16(length);
+  }
+
+  /**
+   * Convert request encoded in network byteorder to host
+   */
+  void hostify() {
+    if (not is_networkified()) {
+      return;
+    }
+    magic = be32toh(magic);
+    command_flags = be16toh(command_flags);
+    type = be16toh(type);
+    handle = be64toh(handle);
+    offset = be64toh(offset);
+    length = be32toh(length);
+  }
+
+  bool is_networkified() { return magic == htobe32(NBD_REQUEST_MAGIC_HOST); }
 } __attribute__((__packed__));
 
 /**
