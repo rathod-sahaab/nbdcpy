@@ -40,7 +40,7 @@ void enqueue_send_read_request(NbdConnection &conn, io_uring *ring_ptr,
   // will persist to cqe.
 
   // queue the write operation to socket
-  io_uring_prep_send(sqe, conn.get_socket(), rqh, sizeof(SimpleReplyHeader), 0);
+  io_uring_prep_send(sqe, conn.get_socket(), rqh, sizeof(RequestHeader), 0);
 }
 void submit_read_request(NbdConnection &conn, io_uring *ring_ptr,
                          u_int64_t p_handle, u_int64_t p_offset,

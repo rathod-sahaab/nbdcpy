@@ -98,7 +98,7 @@ struct RequestHeader {
   /**
    * Just like the construct, created for using with malloc where you can't new
    */
-  void intialise(u_int16_t p_command, u_int16_t p_type, u_int64_t p_handle,
+  void intialize(u_int16_t p_command, u_int16_t p_type, u_int64_t p_handle,
                  u_int64_t p_offset, u_int32_t p_length) {
 
     magic = NBD_REQUEST_MAGIC_HOST;
@@ -120,7 +120,7 @@ struct RequestHeader {
     type = htobe16(type);
     handle = htobe64(handle);
     offset = htobe64(offset);
-    length = htobe16(length);
+    length = htobe32(length);
   }
 
   /**
