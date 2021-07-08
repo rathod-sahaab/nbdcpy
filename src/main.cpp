@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <endian.h>
 #include <liburing.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -41,7 +42,8 @@ int main(int argc, char **argv) {
   std::vector<Operation> operations(MAX_INFLIGHT_REQUESTS);
 
   // fill the operations vector first
-  for (int i = 0; i < MAX_INFLIGHT_REQUESTS; ++i) {
+  for (int i = 0; i < MAX_INFLIGHT_REQUESTS and offset < total_size; ++i) {
+    fmt::print("offest: {}, bytes_left: {}\n", offset, bytes_left);
     auto &operation = operations[i];
 
     operation.handle = i;
@@ -69,6 +71,8 @@ int main(int argc, char **argv) {
     bytes_left -= operation.length;
   }
 
+  fmt::print("Out of for loop\n");
+
   // submit the enqueued operations above to io_ring
   io_uring_submit(&ring);
 
@@ -87,6 +91,8 @@ int main(int argc, char **argv) {
      * half completed operation.
      */
 
+    fmt::print("before wait\n");
+
     struct io_uring_cqe *cqe = nullptr; // mutated by io_uring_wait_cqe
     /*
      * We must wait for a completion as there are already MAX_INFLIGHT_REQUESTS
@@ -94,18 +100,27 @@ int main(int argc, char **argv) {
      */
     int ret = io_uring_wait_cqe(&ring, &cqe);
 
+    fmt::print("after wait\n");
+
     if (ret != 0) {
-      perror("io_uring_cqe ret");
-      exit(1);
-    }
-    if (!cqe) {
-      perror("io_uring_cqe cqe");
+      fmt::print("io_uring_cqe ret");
       exit(1);
     }
 
+    if (not cqe) {
+
+      std::cout << "cqe is null" << std::endl;
+    }
+    fmt::print("after cqe and ret\n");
+
+    std::cout << " Before uring_user_data retrival" << std::endl;
     // we insert Operation* or nullptr hence casting is safe
-    UringUserData *const uring_user_data =
-        (UringUserData *)io_uring_cqe_get_data(cqe);
+    UringUserData *const uring_user_data = (UringUserData *)cqe->user_data;
+
+    if (not uring_user_data) {
+      std::cout << "uring_user_data null" << std::endl;
+    }
+    std::cout << " After retrival" << std::endl;
 
     if (uring_user_data->is_read) {
       // read operation, data field points to buffer where SimpleReplyHeader is
@@ -113,7 +128,10 @@ int main(int argc, char **argv) {
       SimpleReplyHeader *const srh = (SimpleReplyHeader *)uring_user_data->data;
       srh->hostify();
 
-      Operation &operation_ref = operations[srh->handle];
+      fmt::print("Read handle: {} ({})\n", (unsigned long)srh->handle,
+                 (unsigned long)be64toh(srh->handle));
+
+      Operation &operation_ref = operations[(unsigned long)srh->handle];
 
       // TODO: check for errors
       if (operation_ref.state == OperationState::READING) {
@@ -163,8 +181,13 @@ int main(int argc, char **argv) {
 
       RequestHeader *const request_ptr = (RequestHeader *)uring_user_data->data;
 
+      fmt::print("Request Header: {} ({})\n",
+                 (unsigned long)request_ptr->handle,
+                 (unsigned long)be64toh(request_ptr->handle));
+
       // every field was created in network byte order.
-      Operation &operation_ref = operations[be64toh(request_ptr->handle)];
+      Operation &operation_ref =
+          operations[(unsigned long)be64toh(request_ptr->handle)];
       // operation state is actually the previous state so we need to advance it
       if (operation_ref.state == OperationState::REQUESTING) {
         enqueue_read_header(nbd_src, &ring);
@@ -180,6 +203,7 @@ int main(int argc, char **argv) {
         io_uring_submit(&ring);
       }
     }
+    fmt::print("uring checked");
 
     io_uring_cqe_seen(&ring, cqe);
   }

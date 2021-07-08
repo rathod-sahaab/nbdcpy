@@ -66,7 +66,7 @@ constexpr const u_int32_t NBD_SIMPLE_REPLY_MAGIC_HOST = 0x67446698;
 constexpr const u_int32_t NBD_STRUCTURED_REPLY_MAGIC_HOST = 0x668e33ef;
 
 struct RequestHeader {
-  const u_int32_t magic = htonl(NBD_REQUEST_MAGIC_HOST); // NBD_REQUEST_MAGIC
+  const u_int32_t magic = htobe32(NBD_REQUEST_MAGIC_HOST); // NBD_REQUEST_MAGIC
   u_int16_t command_flags;
   u_int16_t type;
   /**
@@ -123,8 +123,8 @@ struct RequestHeader {
     // but it would have hidden the fact that variables are in network
     // byte-order and hence are tainted.
 
-    p_command_flags = htons(p_command_flags);
-    p_type = htons(p_type);
+    p_command_flags = htobe16(p_command_flags);
+    p_type = htobe16(p_type);
     p_handle = htobe64(p_handle);
     p_offset = htobe64(p_offset);
     p_length = htobe32(p_length);
