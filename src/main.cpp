@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
       SimpleReplyHeader *const srh = (SimpleReplyHeader *)uring_user_data->data;
       srh->hostify();
 
-      fmt::print("Read handle: {} ({})\n", (unsigned long)srh->handle,
+      fmt::print("Reply handle: {} ({})\n", (unsigned long)srh->handle,
                  (unsigned long)be64toh(srh->handle));
 
       Operation &operation_ref = operations[(unsigned long)srh->handle];
@@ -186,14 +186,14 @@ int main(int argc, char **argv) {
       // write operation data points to request which this belongs to
 
       RequestHeader *const request_ptr = (RequestHeader *)uring_user_data->data;
+      request_ptr->hostify();
 
       fmt::print("Request Header: {} ({})\n",
                  (unsigned long)request_ptr->handle,
                  (unsigned long)be64toh(request_ptr->handle));
 
       // every field was created in network byte order.
-      Operation &operation_ref =
-          operations[(unsigned long)be64toh(request_ptr->handle)];
+      Operation &operation_ref = operations[request_ptr->handle];
       // operation state is actually the previous state so we need to advance it
       if (operation_ref.state == OperationState::REQUESTING) {
         enqueue_read_header(nbd_src, &ring);

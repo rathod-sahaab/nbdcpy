@@ -160,8 +160,8 @@ struct SimpleReplyHeader {
     if (is_hostified()) {
       return;
     }
-    simple_reply_magic = ntohl(simple_reply_magic);
-    errors = ntohl(simple_reply_magic);
+    simple_reply_magic = be32toh(simple_reply_magic);
+    errors = be32toh(errors);
     handle = be64toh(handle);
   }
 
