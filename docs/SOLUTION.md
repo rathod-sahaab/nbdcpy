@@ -136,3 +136,92 @@ stateDiagram-v2
 Events are `cqe` (we get a completion queue entry for a request we submit to iouring) we can attach some data with submission queue entry SQE which will be carried un-altered to cqe. I plan to store the handle which gives us access to the other data. We can add all required data to data and just use iouring and we will still be able to do everything, but I just realised this while writing and need to think about it more, IMO operations vector approach makes code more understandable and simpler.
 
 Error events are `cqe error` and `error` later represents NBD error like invalid read/write.
+
+# Technical Approach
+
+I use uring instead of i`io_uring` because markdown uses `_` for italics and escaping is mouthful.
+
+As explained earlier we get CQE after every event's completion. While it works fine for write/send on socket, on read we face problems, the root of the problem is Multiplexing.
+
+See, NBD protocol author kept in mind that using one socket for one request at a time is wasting the socket so they added `handle` field in nbd request which is very similar to HTTP/2 stream ID which allows multiple requests over single TCP connection (NBD was first to do it).
+
+When multiplexing, for uring it is easy to determine which write is completed. But when reading from a socket it is not possible for uring to determine which request was completed, it can only determine a read is available now it's up to our program to act accordingly.
+
+### Before you async
+
+A typical blocking send would look like
+
+```cpp
+RequestHeader rqh(...);
+rqh.networkify();
+
+send(fd, &rqh, sizeof(rqh), 0);
+```
+
+You can do this even in a function without worries because `rqh` and `&rqh` are still valid.
+
+But in case of async I/O the operation is not guaranteed to be completed before calling function returns. and if the function returns &rqh would no longer be valid as it was on function's stack.
+
+So we need to allocate it on the heap.
+
+```cpp
+RequestHeader *const rqh_ptr = new RequestHeader(...);
+rqh_ptr->networkify();
+
+async_send(fd, rqh_ptr, sizeof(*rqh_ptr), 0);
+```
+
+Now we have to free/delete the allocated memory.
+
+### UringUserData
+
+We get CQE from uring by
+
+```cpp
+io_uring_cqe* cqe = nullptr;
+
+int ret = io_uring_wait_cqe(cqe);
+```
+
+cqe contains 3 fields `flags`, `res`, `user_data`
+
+`flags` and `res` won't tell us which request does CQE belong to so we use the the third field `user_data` in which we can store anything(actually it's just pointer so not technically).
+
+We store a struct `UringUserData`
+
+`UringUserData` struct contains following fields.
+
+```cpp
+struct UringUserData{
+	void* data;
+	bool is_read;
+}
+```
+
+**data**: Pointer to request (RequestHeader, SimplerReplyHeader) so that we can free it.
+
+Now both of those contain handle which will help us get the index in operation vector which contains all the data we need.
+
+**is_read**: To determine if socket operation was send(Read Request, Write Request) or recv(SimplerReplyHeader). This is required because write operations have one step in common, and read operations have one step in common.
+
+#### Storing UringUserData
+
+```cpp
+io_uring_prep_send(sqe, ...);
+
+UringUserData *uring_user_data = new UringUserData(request_ptr, true);
+io_uring_sqe_set_data(sqe, uring_user_data);
+```
+
+Note that set data comes after `prep_send` this is because `prep_send` zeros user_data fields so it contains `nullptr` instead of some garbage.
+
+#### Retrieving UringUserData
+
+```cpp
+io_uring_wait_cqe(cqe);
+
+UringUserData *uring_user_data = (UringUserData *)io_uring_cqe_get_data(cqe);
+// ... do the work
+delete uring_user_data;
+// free(uring_user_data); // if you use malloc
+```
