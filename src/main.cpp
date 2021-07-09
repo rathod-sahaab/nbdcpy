@@ -108,14 +108,20 @@ int main(int argc, char **argv) {
     }
 
     if (not cqe) {
-
       std::cout << "cqe is null" << std::endl;
     }
-    fmt::print("after cqe and ret\n");
+
+    if (cqe->res < 0) {
+      std::cout << "cqe res: Async operation failed" << std::endl;
+    }
 
     std::cout << " Before uring_user_data retrival" << std::endl;
     // we insert Operation* or nullptr hence casting is safe
-    UringUserData *const uring_user_data = (UringUserData *)cqe->user_data;
+    void *vp = io_uring_cqe_get_data(cqe);
+    fmt::print("get data vp: <{:#x}>\n", (unsigned long)vp);
+    UringUserData *const uring_user_data = (UringUserData *)vp;
+    fmt::print("Inserted Uring userdata: <{:#x}>\n",
+               (unsigned long)uring_user_data);
 
     if (not uring_user_data) {
       std::cout << "uring_user_data null" << std::endl;
@@ -195,7 +201,7 @@ int main(int argc, char **argv) {
         io_uring_submit(&ring);
 
         // only delete here because writing used operation_ref.buffer
-        delete request_ptr;
+        std::free(request_ptr);
       } else {
         // writing
         enqueue_read_header(nbd_dest, &ring);
@@ -205,6 +211,7 @@ int main(int argc, char **argv) {
     }
     fmt::print("uring checked");
 
+    free(uring_user_data);
     io_uring_cqe_seen(&ring, cqe);
   }
 

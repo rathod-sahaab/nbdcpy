@@ -32,6 +32,11 @@ struct UringUserData {
 
   UringUserData(void *p_data, bool p_is_read)
       : data{p_data}, is_read{p_is_read} {}
+
+  void initiaize(void *p_data, bool p_is_read) {
+    data = p_data;
+    is_read = p_is_read;
+  }
 };
 
 #endif // IOURING_USER_DATA_HPP

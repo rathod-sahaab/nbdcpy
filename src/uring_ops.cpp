@@ -21,26 +21,31 @@ void enqueue_send_read_request(NbdConnection &conn, io_uring *ring_ptr,
 
   // Can't allocate this on the stack because io_uring might process it
   // after the function's lifetime
-  // TODO: delete/free this memory
   RequestHeader *const rqh =
-      new RequestHeader(0, NBD_CMD_READ, p_handle, p_offset, p_length);
+      (RequestHeader *)std::malloc(sizeof(RequestHeader));
+  rqh->intialize(0, NBD_CMD_READ, p_handle, p_offset, p_length);
   rqh->networkify();
 
   io_uring_sqe *sqe = io_uring_get_sqe(ring_ptr);
 
   // Added rqh to delete on completion
-  UringUserData *uring_user_data = new UringUserData(rqh, IS_WRITE);
+  UringUserData *const uring_user_data =
+      (UringUserData *)std::malloc(sizeof(UringUserData));
+  uring_user_data->initiaize(rqh, IS_WRITE);
   // IS_WRITE because we send/write the socket
 
   if (not uring_user_data) {
     std::cout << "uring_user_data null at insertion" << std::endl;
   }
+  fmt::print("Inserted Uring userdata: <{:#x}>\n",
+             (unsigned long)uring_user_data);
+
+  // queue the write operation to socket
+  io_uring_prep_send(sqe, conn.get_socket(), rqh, sizeof(*rqh), 0);
+  // set_data should be called after send/write as prep_send
   io_uring_sqe_set_data(sqe, uring_user_data);
   // to determine which nbd request does the entry belongs to
   // will persist to cqe.
-
-  // queue the write operation to socket
-  io_uring_prep_send(sqe, conn.get_socket(), rqh, sizeof(RequestHeader), 0);
 }
 void submit_read_request(NbdConnection &conn, io_uring *ring_ptr,
                          u_int64_t p_handle, u_int64_t p_offset,
