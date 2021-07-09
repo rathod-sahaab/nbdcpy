@@ -58,12 +58,11 @@ void enqueue_read_header(NbdConnection &conn, io_uring *ring_ptr) {
   fmt::print("Reading headers from socket of {}\n", conn.get_name());
   SimpleReplyHeader *srh_ptr = new SimpleReplyHeader();
   io_uring_sqe *sqe = io_uring_get_sqe(ring_ptr);
-  UringUserData *uring_user_data = new UringUserData(srh_ptr, IS_READ);
-
-  io_uring_sqe_set_data(sqe, uring_user_data);
-
   io_uring_prep_read(sqe, conn.get_socket(), srh_ptr, sizeof(SimpleReplyHeader),
                      0);
+
+  UringUserData *uring_user_data = new UringUserData(srh_ptr, IS_READ);
+  io_uring_sqe_set_data(sqe, uring_user_data);
 }
 
 void enqueue_write(const NbdConnection &conn, io_uring *ring_ptr,
@@ -75,19 +74,14 @@ void enqueue_write(const NbdConnection &conn, io_uring *ring_ptr,
              conn.get_name(), p_length, p_offset, p_handle);
   RequestHeader *const rqh = (RequestHeader *)buffer;
 
-  rqh->command_flags = 0;
-  rqh->type = NBD_CMD_WRITE;
-  rqh->handle = p_handle;
-  rqh->offset = p_offset;
-  rqh->length = p_length;
-
+  rqh->intialize(0, NBD_CMD_WRITE, p_handle, p_offset, p_length);
   rqh->networkify();
 
   io_uring_sqe *sqe = io_uring_get_sqe(ring_ptr);
-  UringUserData *uring_user_data = new UringUserData(buffer, IS_WRITE);
-
-  io_uring_sqe_set_data(sqe, uring_user_data);
 
   io_uring_prep_send(sqe, conn.get_socket(), buffer,
                      sizeof(RequestHeader) + p_length, 0);
+
+  UringUserData *uring_user_data = new UringUserData(buffer, IS_WRITE);
+  io_uring_sqe_set_data(sqe, uring_user_data);
 }
