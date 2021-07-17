@@ -43,7 +43,6 @@ int main(int argc, char **argv) {
 
   // fill the operations vector first
   for (int i = 0; i < MAX_INFLIGHT_REQUESTS and offset < total_size; ++i) {
-    fmt::print("offest: {}, bytes_left: {}\n", offset, bytes_left);
     auto &operation = operations[i];
 
     operation.handle = i;
@@ -71,12 +70,35 @@ int main(int argc, char **argv) {
     bytes_left -= operation.length;
   }
 
-  fmt::print("Out of for loop\n");
-
   // submit the enqueued operations above to io_ring
   io_uring_submit(&ring);
 
   while (bytes_left > 0 or queued_requests > 0) {
+
+    std::cout << "Operation States:\n";
+    for (const auto &operation : operations) {
+      char state;
+
+      switch (operation.state) {
+      case OperationState::REQUESTING:
+        state = 'r';
+        break;
+      case OperationState::READING:
+        state = 'R';
+        break;
+      case OperationState::WRITING:
+        state = 'W';
+        break;
+      case OperationState::CONFIRMING:
+        state = 'C';
+        break;
+      case OperationState::EMPTY:
+        state = 'E';
+        break;
+      }
+      std::cout << state << " ";
+    }
+    std::cout << "\n";
     /*
      * here 'operation' is a complete copy operation
      *
@@ -91,16 +113,12 @@ int main(int argc, char **argv) {
      * half completed operation.
      */
 
-    fmt::print("before wait\n");
-
     struct io_uring_cqe *cqe = nullptr; // mutated by io_uring_wait_cqe
     /*
      * We must wait for a completion as there are already MAX_INFLIGHT_REQUESTS
      * in the io_uring.
      */
     int ret = io_uring_wait_cqe(&ring, &cqe);
-
-    fmt::print("after wait\n");
 
     if (ret != 0) {
       fmt::print("io_uring_cqe ret");
@@ -115,20 +133,15 @@ int main(int argc, char **argv) {
       std::cout << "cqe res: Async operation failed" << std::endl;
     }
 
-    std::cout << " Before uring_user_data retrival" << std::endl;
     // we insert Operation* or nullptr hence casting is safe
     void *vp = io_uring_cqe_get_data(cqe);
-    fmt::print("get data vp: <{:#x}>\n", (unsigned long)vp);
     UringUserData *const uring_user_data = (UringUserData *)vp;
-    fmt::print("Inserted Uring userdata: <{:#x}>\n",
-               (unsigned long)uring_user_data);
 
     if (not uring_user_data) {
       std::cout << "uring_user_data null" << std::endl;
     }
-    std::cout << " After retrival" << std::endl;
-
     if (uring_user_data->is_read) {
+      std::cout << "CQE uring user data is read" << std::endl;
       // read operation, data field points to buffer where SimpleReplyHeader is
       // read
       SimpleReplyHeader *const srh = (SimpleReplyHeader *)uring_user_data->data;
@@ -139,8 +152,10 @@ int main(int argc, char **argv) {
 
       Operation &operation_ref = operations[(unsigned long)srh->handle];
 
-      // TODO: check for errors
+      // TODO: check for nbd errors
       if (operation_ref.state == OperationState::READING) {
+        std::cout << "Reading the rest of the data for socket" << std::endl;
+
         const auto ret = recv(nbd_src.get_socket(),
                               operation_ref.buffer + sizeof(RequestHeader),
                               operation_ref.length, 0);
@@ -149,10 +164,15 @@ int main(int argc, char **argv) {
           exit(1);
         }
         if (ret < operation_ref.length) {
-          fmt::print("Error: less than operation_ref.length bytes read\n");
+          fmt::print("Error: less than operation_ref.length bytes read{}\n",
+                     ret);
           exit(1);
         }
 
+        write(STDOUT_FILENO, operation_ref.buffer + sizeof(RequestHeader),
+              operation_ref.length);
+
+        std::cout << "Issuing write" << std::endl;
         enqueue_write(nbd_dest, &ring, operation_ref.handle,
                       operation_ref.offset, operation_ref.length,
                       operation_ref.buffer);
@@ -161,6 +181,7 @@ int main(int argc, char **argv) {
         io_uring_submit(&ring);
 
       } else {
+        std::cout << "CQE data is write" << std::endl;
         // can only be confirming, start another request at new offset if all of
         // the file is read set empty
         if (bytes_left > 0) {
@@ -177,6 +198,7 @@ int main(int argc, char **argv) {
         } else {
           queued_requests--;
           operation_ref.state = OperationState::EMPTY;
+          io_uring_cqe_seen(&ring, cqe);
           continue;
         }
       }
@@ -196,6 +218,7 @@ int main(int argc, char **argv) {
       Operation &operation_ref = operations[request_ptr->handle];
       // operation state is actually the previous state so we need to advance it
       if (operation_ref.state == OperationState::REQUESTING) {
+        std::cout << "Transitioning from REQUESTING to READING" << std::endl;
         enqueue_read_header(nbd_src, &ring);
         operation_ref.state = OperationState::READING;
         io_uring_submit(&ring);
@@ -204,14 +227,15 @@ int main(int argc, char **argv) {
         std::free(request_ptr);
       } else {
         // writing
+        std::cout << "Transitioning from WRITING to CONFIRMING" << std::endl;
         enqueue_read_header(nbd_dest, &ring);
         operation_ref.state = OperationState::CONFIRMING;
         io_uring_submit(&ring);
       }
     }
-    fmt::print("uring checked");
+    fmt::print("uring checked\n");
 
-    free(uring_user_data);
+    delete uring_user_data;
     io_uring_cqe_seen(&ring, cqe);
   }
 
