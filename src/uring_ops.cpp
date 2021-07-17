@@ -10,7 +10,7 @@
 #include <liburing/io_uring.h>
 #include <ostream>
 
-constexpr const bool IS_READ = true, IS_WRITE = true;
+constexpr const bool IS_READ = true, IS_WRITE = !IS_READ;
 
 void enqueue_send_read_request(NbdConnection &conn, io_uring *ring_ptr,
                                u_int64_t p_handle, u_int64_t p_offset,
