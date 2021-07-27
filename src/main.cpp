@@ -35,9 +35,20 @@ int main(int argc, char **argv) {
     io_uring_queue_exit(&ring);
     exit(1);
   }
+
+  // job description
   const off_t total_size = nbd_src.get_size();
   off_t offset = 0, bytes_left = total_size;
-  int queued_requests = 0;
+
+  // state params
+  int queued_requests = 0, inqueue_read_header_reqs = 0;
+
+  /*
+   * This denotes how many read requests were fired - Reply reads added to
+   * socket before the program ends all read requests must have corresponding
+   * read header i.e. surplus should be 0
+   */
+  int read_request_surplus = 0;
 
   std::vector<Operation> operations(MAX_INFLIGHT_REQUESTS);
 
@@ -76,27 +87,8 @@ int main(int argc, char **argv) {
   while (bytes_left > 0 or queued_requests > 0) {
 
     std::cout << "Operation States:\n";
-    for (const auto &operation : operations) {
-      char state;
-
-      switch (operation.state) {
-      case OperationState::REQUESTING:
-        state = 'r';
-        break;
-      case OperationState::READING:
-        state = 'R';
-        break;
-      case OperationState::WRITING:
-        state = 'W';
-        break;
-      case OperationState::CONFIRMING:
-        state = 'C';
-        break;
-      case OperationState::EMPTY:
-        state = 'E';
-        break;
-      }
-      std::cout << state << " ";
+    for (const auto &op : operations) {
+      std::cout << getStateChar(op.state) << " ";
     }
     std::cout << "\n";
     /*
@@ -150,36 +142,55 @@ int main(int argc, char **argv) {
       fmt::print("Reply handle: {} ({})\n", (unsigned long)srh->handle,
                  (unsigned long)be64toh(srh->handle));
 
-      Operation &operation_ref = operations[(unsigned long)srh->handle];
+      Operation &op = operations[(unsigned long)srh->handle];
+
+      if (op.state == OperationState::WAITING) {
+        // if cqe was successfull for operation[handle] then, we MUST
+        // have issued read header command in that case WAITING -> READING
+        // should have been done, but we can't know which handle will we get
+        // unless we read the header so we are doing it now
+        op.state = OperationState::READING;
+      }
 
       // TODO: check for nbd errors
-      if (operation_ref.state == OperationState::READING) {
+      if (op.state == OperationState::READING) {
         std::cout << "Reading the rest of the data for socket" << std::endl;
 
+        // FIXME: This MAY NOT move forward the io_uring's offset, so read may
+        // be buggy
         const auto ret = recv(nbd_src.get_socket(),
-                              operation_ref.buffer + sizeof(RequestHeader),
-                              operation_ref.length, 0);
+                              op.buffer + sizeof(RequestHeader), op.length, 0);
         if (ret < 0) {
           fmt::print("recv error\n");
           exit(1);
         }
-        if (ret < operation_ref.length) {
+        if (ret < op.length) {
           fmt::print("Error: less than operation_ref.length bytes read{}\n",
                      ret);
           exit(1);
         }
 
-        write(STDOUT_FILENO, operation_ref.buffer + sizeof(RequestHeader),
-              operation_ref.length);
+        write(STDOUT_FILENO, op.buffer + sizeof(RequestHeader), op.length);
 
         std::cout << "Issuing write" << std::endl;
-        enqueue_write(nbd_dest, &ring, operation_ref.handle,
-                      operation_ref.offset, operation_ref.length,
-                      operation_ref.buffer);
+        enqueue_write(nbd_dest, &ring, op.handle, op.offset, op.length,
+                      op.buffer);
 
-        operation_ref.state = OperationState::WRITING;
+        op.state = OperationState::WRITING;
+
+        /**
+         * we moved to next step of operation i.e. writing
+         * so currently there is no read request in the
+         * works and hence we add another request now.
+         */
+        if (read_request_surplus > 0) {
+          enqueue_read_header(nbd_src, &ring);
+          read_request_surplus--;
+        } else {
+          inqueue_read_header_reqs = 0;
+        }
+
         io_uring_submit(&ring);
-
       } else {
         std::cout << "CQE data is write" << std::endl;
         // can only be confirming, start another request at new offset if all of
@@ -188,16 +199,15 @@ int main(int argc, char **argv) {
           // start a new request
           const auto length = std::min(MAX_PACKET_SIZE, bytes_left);
 
-          enqueue_send_read_request(nbd_src, &ring, operation_ref.handle,
-                                    offset, length);
-          operation_ref.state = OperationState::REQUESTING;
+          enqueue_send_read_request(nbd_src, &ring, op.handle, offset, length);
+          op.state = OperationState::REQUESTING;
 
           offset += length;
           bytes_left -= length;
           io_uring_submit(&ring);
         } else {
           queued_requests--;
-          operation_ref.state = OperationState::EMPTY;
+          op.state = OperationState::EMPTY;
           io_uring_cqe_seen(&ring, cqe);
           continue;
         }
@@ -219,11 +229,17 @@ int main(int argc, char **argv) {
       // operation state is actually the previous state so we need to advance it
       if (operation_ref.state == OperationState::REQUESTING) {
         std::cout << "Transitioning from REQUESTING to READING" << std::endl;
-        enqueue_read_header(nbd_src, &ring);
-        operation_ref.state = OperationState::READING;
-        io_uring_submit(&ring);
+        // NBD read request was successfull
+        read_request_surplus++;
 
-        // only delete here because writing used operation_ref.buffer
+        if (inqueue_read_header_reqs == 0) {
+          // if there is no read header request inflight
+          inqueue_read_header_reqs = 1;
+          enqueue_read_header(nbd_src, &ring);
+          io_uring_submit(&ring);
+        }
+        operation_ref.state = OperationState::WAITING;
+
         std::free(request_ptr);
       } else {
         // writing

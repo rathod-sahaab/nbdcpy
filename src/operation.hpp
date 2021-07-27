@@ -5,10 +5,29 @@
 enum class OperationState : u_int32_t {
   EMPTY,
   REQUESTING,
+  WAITING,
   READING,
   WRITING,
   CONFIRMING,
+
 };
+
+char getStateChar(OperationState state) {
+  switch (state) {
+  case OperationState::REQUESTING:
+    return 'r';
+  case OperationState::WAITING:
+    return 'w';
+  case OperationState::READING:
+    return 'R';
+  case OperationState::WRITING:
+    return 'W';
+  case OperationState::CONFIRMING:
+    return 'C';
+  case OperationState::EMPTY:
+    return 'E';
+  }
+}
 
 /**
  * May be add a buffer attribute, to avoid reallocating buffers
