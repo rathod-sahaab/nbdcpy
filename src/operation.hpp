@@ -12,23 +12,6 @@ enum class OperationState : u_int32_t {
 
 };
 
-char getStateChar(OperationState state) {
-  switch (state) {
-  case OperationState::REQUESTING:
-    return 'r';
-  case OperationState::WAITING:
-    return 'w';
-  case OperationState::READING:
-    return 'R';
-  case OperationState::WRITING:
-    return 'W';
-  case OperationState::CONFIRMING:
-    return 'C';
-  case OperationState::EMPTY:
-    return 'E';
-  }
-}
-
 /**
  * May be add a buffer attribute, to avoid reallocating buffers
  * size = max_size = MAX_PACKET_SIZE + sizeof(RequestHeader)
@@ -39,7 +22,9 @@ struct Operation {
   u_int64_t offset;
   u_int32_t length;
   OperationState state;
-  char *buffer; // not sure
+  char *buffer;
 } __attribute__((__packed__));
+
+char getStateChar(OperationState state);
 
 #endif // OPERATION_HPP
