@@ -35,12 +35,13 @@ Currently, we batch up `MAX_INFLIGHT_REQUEST` number of write requests, followed
 
 1. The idea is to submit only one uring `read_header_from_socket` request
 2. reading data (main and fallback)
-  i. If there is no error(NBD error) on completetion we enqueue a `read_data_from_socket` request to uring and immediately call `io_uring_submit_and_wait()` to get it's response. (this part won't work if did as described)
-  ii. `recv` directly from the socket.
+
+- [ ] If there is no error(NBD error) on completetion we enqueue a `read_data_from_socket` request to uring and immediately call `io_uring_submit_and_wait()` to get it's response. (this part won't work if did as described and need to find actual approach)
+- [x] `recv` directly from the socket.
+
 3. Queue another `read_header_from_socket` request
 4. Call `io_uring_cqe_seen(cqe)`
 
 So at any time there will be only on `read_header_from_socket` request in `io_uring`.
 
-status: **In development.**
-
+status: **WORKS**
