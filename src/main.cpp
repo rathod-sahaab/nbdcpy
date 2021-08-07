@@ -17,7 +17,7 @@
 #include <vector>
 
 constexpr const off_t MAX_PACKET_SIZE = 512; // bytes
-constexpr const int MAX_INFLIGHT_REQUESTS = 6;
+constexpr const int MAX_INFLIGHT_REQUESTS = 16;
 
 int main(int argc, char **argv) {
   struct io_uring ring;
@@ -154,7 +154,8 @@ int main(int argc, char **argv) {
 
       // TODO: check for nbd errors
       if (op.state == OperationState::READING) {
-        std::cout << "Reading the rest of the data for socket" << std::endl;
+        /* std::cout << "Reading the rest of the data for socket" << std::endl;
+         */
 
         // FIXME: This MAY NOT move forward the io_uring's offset, so read may
         // be buggy
@@ -170,9 +171,6 @@ int main(int argc, char **argv) {
           exit(1);
         }
 
-        write(STDOUT_FILENO, op.buffer + sizeof(RequestHeader), op.length);
-
-        std::cout << "Issuing write" << std::endl;
         enqueue_write(nbd_dest, &ring, op.handle, op.offset, op.length,
                       op.buffer);
 
@@ -192,7 +190,6 @@ int main(int argc, char **argv) {
 
         io_uring_submit(&ring);
       } else {
-        std::cout << "CQE data is write" << std::endl;
         // can only be confirming, start another request at new offset if all of
         // the file is read set empty
         if (bytes_left > 0) {
@@ -220,15 +217,12 @@ int main(int argc, char **argv) {
       RequestHeader *const request_ptr = (RequestHeader *)uring_user_data->data;
       request_ptr->hostify();
 
-      fmt::print("Request Header: {} ({})\n",
-                 (unsigned long)request_ptr->handle,
-                 (unsigned long)be64toh(request_ptr->handle));
-
       // every field was created in network byte order.
       Operation &operation_ref = operations[request_ptr->handle];
       // operation state is actually the previous state so we need to advance it
       if (operation_ref.state == OperationState::REQUESTING) {
-        std::cout << "Transitioning from REQUESTING to READING" << std::endl;
+        /* std::cout << "Transitioning from REQUESTING to READING" << std::endl;
+         */
         // NBD read request was successfull
         read_request_surplus++;
 
@@ -243,14 +237,13 @@ int main(int argc, char **argv) {
         std::free(request_ptr);
       } else {
         // writing
-        std::cout << "Transitioning from WRITING to CONFIRMING" << std::endl;
+        /* std::cout << "Transitioning from WRITING to CONFIRMING" << std::endl;
+         */
         enqueue_read_header(nbd_dest, &ring);
         operation_ref.state = OperationState::CONFIRMING;
         io_uring_submit(&ring);
       }
     }
-    fmt::print("uring checked\n");
-
     delete uring_user_data;
     io_uring_cqe_seen(&ring, cqe);
   }
