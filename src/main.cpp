@@ -195,8 +195,10 @@ int main(int argc, char **argv) {
         if (bytes_left > 0) {
           // start a new request
           const auto length = std::min(MAX_PACKET_SIZE, bytes_left);
+          op.length = length;
+          op.offset = offset;
 
-          enqueue_send_read_request(nbd_src, &ring, op.handle, offset, length);
+          enqueue_send_read_request(nbd_src, &ring, op.handle, op.offset, op.length);
           op.state = OperationState::REQUESTING;
 
           offset += length;
