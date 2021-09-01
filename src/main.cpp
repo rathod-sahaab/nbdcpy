@@ -91,6 +91,9 @@ int main(int argc, char **argv) {
       std::cout << getStateChar(op.state) << " ";
     }
     std::cout << "\n";
+
+    fmt::print("Read request surplus: {}, inqueue_read_header_reqs: {}\n",
+               read_request_surplus, inqueue_read_header_reqs);
     /*
      * here 'operation' is a complete copy operation
      *
@@ -139,8 +142,7 @@ int main(int argc, char **argv) {
       SimpleReplyHeader *const srh = (SimpleReplyHeader *)uring_user_data->data;
       srh->hostify();
 
-      fmt::print("Reply handle: {} ({})\n", (unsigned long)srh->handle,
-                 (unsigned long)be64toh(srh->handle));
+      fmt::print("Reply handle: {}\n", (unsigned long)srh->handle);
 
       Operation &op = operations[(unsigned long)srh->handle];
 
@@ -198,7 +200,8 @@ int main(int argc, char **argv) {
           op.length = length;
           op.offset = offset;
 
-          enqueue_send_read_request(nbd_src, &ring, op.handle, op.offset, op.length);
+          enqueue_send_read_request(nbd_src, &ring, op.handle, op.offset,
+                                    op.length);
           op.state = OperationState::REQUESTING;
 
           offset += length;

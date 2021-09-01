@@ -1,30 +1,29 @@
-# CPP conan template
+# NBDcpy
 
-A template repo to quickly start cpp projects using [conan package manager](https://conan.io) and CMake.
+This is a tool to copy contents from one NBD server to another over application layer [NBD protocol](https://github.com/NetworkBlockDevice/nbd/blob/master/doc/proto.md), using [io_uring](https://unixism.net/loti/what_is_io_uring.html) for async I/O for speed.
 
-_Inspired by [ForgottenUmbrella's gist](https://gist.github.com/ForgottenUmbrella/0f32f6446b2948a3a5a99687b264910d)_
+More documentation can be found in the docs folder.
 
-## Configure
+## Usage
+Currently only localhost is supported with oldstyle hand shake.
+```
+nbdcpy <source-port> <destination-port>
+```
 
-1. Change project name in `CMakeList.txt`.
-2. Update dependencies in `conanfile.txt`.
+ex:
+```
+nbdcpy 10879 8080
+```
 
+This copies all data from NBD server at port 10879 to NBD server 8080.
 ## Setup
 
 Run
 
 ```sh
-./setup.sh
-```
-
-or
-
-```sh
 mkdir build && cd build
 conan install ..
 cmake .. -DCMAKE_EXPORT_COMPILE_COMMANDS=1 # generates compile_commands.json
-
-ln -s compile_commands.json ../compile_commands.json # link compile_commands.json to home dir
 ```
 
 **Note:** Omit `ln -s ...` for windows manually copy compile_commands (AFAIK ln is not supported on windows).
