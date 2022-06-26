@@ -9,7 +9,6 @@ enum class OperationState : u_int32_t {
   READING,
   WRITING,
   CONFIRMING,
-
 };
 
 /**
@@ -23,8 +22,10 @@ struct Operation {
   u_int32_t length;
   OperationState state;
   char *buffer;
-} __attribute__((__packed__));
 
-char getStateChar(OperationState state);
+public: // functions
+  /// a utility function to get the state char for debugging
+  char getStateChar() const noexcept;
+} __attribute__((__packed__));
 
 #endif // OPERATION_HPP

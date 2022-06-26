@@ -1,11 +1,11 @@
-#include "cli-params.hpp"
+#include "core/operation.hpp"
+#include "core/uring_ops.hpp"
+#include "core/uring_user_data.hpp"
 #include "fmt/core.h"
-#include "nbd_connection.hpp"
-#include "nbd_types.hpp"
-#include "oldstyle.hpp"
-#include "operation.hpp"
-#include "uring_ops.hpp"
-#include "uring_user_data.hpp"
+#include "proto/nbd_connection.hpp"
+#include "proto/nbd_types.hpp"
+#include "proto/oldstyle.hpp"
+#include "ui/cli-params.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
 
     std::cout << "Operation States:\n";
     for (const auto &op : operations) {
-      std::cout << getStateChar(op.state) << " ";
+      std::cout << op.getStateChar() << " ";
     }
     std::cout << "\n";
 

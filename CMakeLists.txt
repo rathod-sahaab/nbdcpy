@@ -13,10 +13,14 @@ conan_basic_setup()  # Prepares the CMakeList.txt for Conan.
 # add all files of source folder
 file(GLOB SOURCES
 	src/*.h
+	src/*.hpp
 	src/*.cpp
+	src/**/*.h
+	src/**/*.hpp
+	src/**/*.cpp
 )
 
 # $source_files is a space-delimited list of filenames.
 add_executable(${PROJECT_NAME} ${SOURCES})  # Specifies the executable to build.
 target_link_libraries(${PROJECT_NAME} ${CONAN_LIBS})  # Specifies what libraries to link, using Conan.
-target_link_libraries(${PROJECT_NAME} -luring) 
+# target_link_libraries(${PROJECT_NAME} -luring)

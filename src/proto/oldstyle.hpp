@@ -30,6 +30,5 @@ struct OldstyleServerOffer {
 } __attribute__((__packed__));
 
 bool is_oldstyle_offer(const OldstyleServerOffer &offer);
-void print_server_offer(const OldstyleServerOffer &server_offer);
 
 #endif // OLDSTYLE_SERVER_OFFER_HPP

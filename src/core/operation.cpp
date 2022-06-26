@@ -1,7 +1,7 @@
 #include "operation.hpp"
 
-char getStateChar(OperationState state) {
-  switch (state) {
+char Operation::getStateChar() const noexcept {
+  switch (this->state) {
   case OperationState::REQUESTING:
     return 'r';
   case OperationState::WAITING:

@@ -1,8 +1,8 @@
 #include "nbd_connection.hpp"
+#include "../ui/outputs.hpp"
 #include "fmt/core.h"
 #include "nbd_types.hpp"
 #include "oldstyle.hpp"
-#include "utils.hpp"
 #include <arpa/inet.h>
 #include <bits/stdint-uintn.h>
 #include <cstdio>
@@ -49,9 +49,8 @@ NbdConnection::NbdConnection(const std::string &&name, const int port)
     exit(3);
   }
 
-  /* fmt::print("{:-^30}\n", name); */
-  print_header(name);
-  print_server_offer(offer);
+  NBDCpy::Outputs::print_header(name);
+  NBDCpy::Outputs::print_server_offer(offer);
 
   size = offer.export_size;
 }

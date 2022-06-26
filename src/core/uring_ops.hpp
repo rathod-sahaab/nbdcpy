@@ -1,7 +1,7 @@
 #ifndef URING_OPS_HPP
 #define URING_OPS_HPP
 
-#include "nbd_connection.hpp"
+#include "../proto/nbd_connection.hpp"
 #include "operation.hpp"
 #include <liburing.h>
 #include <sys/types.h>

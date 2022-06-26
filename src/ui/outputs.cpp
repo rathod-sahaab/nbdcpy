@@ -1,13 +1,15 @@
-#include "oldstyle.hpp"
-#include "fmt/format.h"
+#include "outputs.hpp"
+#include "fmt/core.h"
 #include <algorithm>
 #include <bitset>
-#include <cstring>
-#include <iomanip>
-#include <iostream>
 
-bool is_oldstyle_offer(const OldstyleServerOffer &offer) {
-  return offer.magic == NBDMAGIC and offer.cliserv_magic == CLISERVE_MAGIC;
+namespace NBDCpy {
+namespace Outputs {
+void print_header(const std::string &s) {
+  fmt::print("┌{0:─^{2}}┐\n"
+             "│{1: ^{2}}│\n"
+             "└{0:─^{2}}┘\n",
+             "", s, 30);
 }
 
 void print_server_offer(const OldstyleServerOffer &server_offer) {
@@ -30,3 +32,5 @@ void print_server_offer(const OldstyleServerOffer &server_offer) {
 
   return;
 }
+} // namespace Outputs
+} // namespace NBDCpy

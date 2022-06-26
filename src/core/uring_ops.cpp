@@ -1,6 +1,6 @@
 #include "uring_ops.hpp"
+#include "../proto/nbd_types.hpp"
 #include "fmt/core.h"
-#include "nbd_types.hpp"
 #include "uring_user_data.hpp"
 #include <cstdio>
 #include <cstdlib>
