@@ -16,16 +16,12 @@
 #include <unistd.h>
 #include <vector>
 
-constexpr const off_t MAX_PACKET_SIZE = 512; // bytes
-constexpr const int MAX_INFLIGHT_REQUESTS = 16;
-
 int main(int argc, char **argv) {
-  struct io_uring ring;
-  io_uring_queue_init(MAX_INFLIGHT_REQUESTS, &ring, 0);
-
   const auto cli_params = parse_cli(argc, argv);
-  fmt::print("Copying from port {} to port {}.\n", cli_params.src_port,
-             cli_params.dest_port);
+  display_info(cli_params);
+
+  struct io_uring ring;
+  io_uring_queue_init(cli_params.max_inflight_requests, &ring, 0);
 
   NbdConnection nbd_src("source", cli_params.src_port);
   NbdConnection nbd_dest("destination", cli_params.dest_port);
@@ -50,16 +46,17 @@ int main(int argc, char **argv) {
    */
   int read_request_surplus = 0;
 
-  std::vector<Operation> operations(MAX_INFLIGHT_REQUESTS);
+  std::vector<Operation> operations(cli_params.max_inflight_requests);
 
   // fill the operations vector first
-  for (int i = 0; i < MAX_INFLIGHT_REQUESTS and offset < total_size; ++i) {
+  for (int i = 0; i < cli_params.max_inflight_requests and offset < total_size;
+       ++i) {
     auto &operation = operations[i];
 
     operation.handle = i;
     operation.state = OperationState::REQUESTING;
     operation.offset = offset;
-    operation.length = std::min(MAX_PACKET_SIZE, bytes_left);
+    operation.length = std::min(cli_params.max_pakcket_size, bytes_left);
 
     // we read Replies from source in this buffer
     // and use this buffer to send data to destination
@@ -71,7 +68,8 @@ int main(int argc, char **argv) {
     // RequestHeader allocating for RequestHeader is suffice.
     // CAUTION: You MUST always offset 28 bytes for data in any case
     // void* data = buffer + 28 i.e. buffer + sizeof(RequestHeader)
-    operation.buffer = (char *)malloc(sizeof(RequestHeader) + MAX_PACKET_SIZE);
+    operation.buffer =
+        (char *)malloc(sizeof(RequestHeader) + cli_params.max_pakcket_size);
 
     enqueue_send_read_request(nbd_src, &ring, i, operation.offset,
                               operation.length);
@@ -196,7 +194,7 @@ int main(int argc, char **argv) {
         // the file is read set empty
         if (bytes_left > 0) {
           // start a new request
-          const auto length = std::min(MAX_PACKET_SIZE, bytes_left);
+          const auto length = std::min(cli_params.max_pakcket_size, bytes_left);
           op.length = length;
           op.offset = offset;
 
