@@ -27,7 +27,8 @@ int main(int argc, char **argv) {
   NbdConnection nbd_dest("destination", cli_params.dest_port);
 
   if (nbd_dest.get_size() < nbd_src.get_size()) {
-    fmt::print("Source is larger than destination, will cause data loss\n");
+    fmt::print(stderr,
+               "Source is larger than destination, will cause data loss\n");
     io_uring_queue_exit(&ring);
     exit(1);
   }
