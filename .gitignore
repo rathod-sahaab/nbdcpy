@@ -1,6 +1,7 @@
 # editor
 .cache/
 compile_commands.json
+CMakeCache.txt
 
 # builds
 build/
