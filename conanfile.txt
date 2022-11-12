@@ -2,6 +2,7 @@
 cli11/1.9.1
 fmt/8.1.1
 liburing/2.1
+gtest/cci.20210126
 
 [generators]
 cmake
